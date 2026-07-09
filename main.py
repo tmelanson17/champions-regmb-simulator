@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 from pathlib import Path
 
@@ -7,7 +8,19 @@ BATTLE_FORMAT = "gen9championsvgc2026regmb"
 DATA_DIR = Path(__file__).parent / "data"
 
 
-async def main():
+def parse_args():
+    parser = argparse.ArgumentParser(description="Battle two RandomPlayers in Champions VGC 2026 Reg M-B.")
+    parser.add_argument(
+        "-n",
+        "--num-simulations",
+        type=int,
+        default=1,
+        help="Number of battles to simulate (default: 1)",
+    )
+    return parser.parse_args()
+
+
+async def main(n_battles: int):
     team1 = (DATA_DIR / "team1.txt").read_text()
     team2 = (DATA_DIR / "team2.txt").read_text()
 
@@ -24,11 +37,12 @@ async def main():
         accept_open_team_sheet=True,
     )
 
-    await player_1.battle_against(player_2, n_battles=1)
+    await player_1.battle_against(player_2, n_battles=n_battles)
 
     print(f"Finished battles: {player_1.n_finished_battles}")
     print(f"Player 1 wins: {player_1.n_won_battles}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    args = parse_args()
+    asyncio.run(main(args.num_simulations))
