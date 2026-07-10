@@ -43,6 +43,8 @@ async def main(n_battles: int):
 
     print(f"Finished battles: {player_1.n_finished_battles}")
     print(f"Player 1 wins: {player_1.n_won_battles}")
+    print(f"Battle Tree:")
+    player_1.battle_tracker.print_tree()
 
 
 if __name__ == "__main__":

@@ -16,6 +16,17 @@ class TurnNode:
             if child.move == move and not child.is_terminal:
                 return child
         return None
+    
+    def __str__(self) -> str:
+        return f"[Terminal: {self.is_terminal}, Loss: {self.is_loss} Move: {self.move}]"
+
+def turn_tree_str(node: TurnNode, prefix="", is_last=True):
+    connector = "└── " if is_last else "├── "
+    lines = [prefix + connector + str(node)]
+    child_prefix = prefix + ("    " if is_last else "│   ")
+    for i, child in enumerate(node.children):
+        lines.append(turn_tree_str(child, child_prefix, i == len(node.children) - 1))
+    return "\n".join(lines)
 
 
 class BattleTracker:
@@ -45,3 +56,6 @@ class BattleTracker:
         node.is_terminal = True
         node.is_loss = is_loss
         del self._current[tag]
+
+    def print_tree(self):
+        print(turn_tree_str(self.root))
