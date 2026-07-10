@@ -4,6 +4,8 @@ from pathlib import Path
 
 from poke_env.player import RandomPlayer
 
+from tracked_player import TrackedPlayer
+
 BATTLE_FORMAT = "gen9championsvgc2026regmb"
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -24,7 +26,7 @@ async def main(n_battles: int):
     team1 = (DATA_DIR / "team1.txt").read_text()
     team2 = (DATA_DIR / "team2.txt").read_text()
 
-    player_1 = RandomPlayer(
+    player_1 = TrackedPlayer(
         battle_format=BATTLE_FORMAT,
         team=team1,
         max_concurrent_battles=1,
