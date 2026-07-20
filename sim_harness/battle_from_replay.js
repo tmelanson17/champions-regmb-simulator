@@ -8,8 +8,9 @@
 // Run with: node battle_from_replay.js path/to/replay.html
 
 const fs = require('fs');
+const path = require('path');
 const { reconstructTeamsFromReplay } = require('./replay_team');
-const { createBattle, runUntil } = require('./harness');
+const { createBattle, runUntil, writeReplayHtml } = require('./harness');
 
 const FORMAT = 'gen9championsvgc2026regmb';
 
@@ -35,5 +36,11 @@ console.log(`Battle started (${FORMAT}). requestState: ${battle.requestState}`);
 // Play it out with PS's own auto-picker so you can see the whole thing run.
 runUntil(battle, b => b.ended);
 console.log(`Finished at turn ${battle.turn}: ${battle.winner ? `winner ${battle.winner}` : 'tie'}`);
+
+const { dir, name } = path.parse(replayPath);
+const outputPath = path.join(dir, `${name}-resimulated.html`);
+writeReplayHtml(battle, outputPath, { title: 'Resimulated battle (fresh from team preview)' });
+console.log(`Wrote viewable replay to: ${outputPath}`);
+console.log('Open it in a browser (needs internet access to load PS\'s replay viewer script).');
 
 module.exports = { battle };

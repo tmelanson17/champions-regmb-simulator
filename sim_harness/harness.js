@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('fs');
 const { Battle, BattleStream, Teams } = require('pokemon-showdown');
 
 /**
@@ -64,4 +65,43 @@ function runUntil(battle, stopWhen, choicesForTurn = () => ({})) {
   return battle;
 }
 
-module.exports = { createBattle, snapshot, fork, step, runUntil };
+function escapeHtml(text) {
+  return String(text).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+}
+
+/**
+ * Renders `battle.log` (the same '|'-prefixed protocol PS replays are made
+ * of) into the same standalone HTML wrapper PS's own "Download replay"
+ * produces. Opening the result in a browser (with internet access, since it
+ * loads PS's replay-embed.js from their CDN to actually render/animate it)
+ * shows the simulated battle exactly like a real replay page.
+ */
+function replayHtml(battle, { title = 'Simulated battle' } = {}) {
+  const p1 = (battle.p1 && battle.p1.name) || 'p1';
+  const p2 = (battle.p2 && battle.p2.name) || 'p2';
+  // PS escapes every '/' in the embedded log so nothing inside it can ever
+  // be misread as a literal '</script>' closing the tag early.
+  const logText = battle.log.join('\n').replace(/\//g, '\\/');
+
+  return `<!DOCTYPE html>
+<meta charset="utf-8" />
+<title>${escapeHtml(title)}</title>
+<div class="wrapper replay-wrapper" style="max-width:1180px;margin:0 auto">
+<input type="hidden" name="replayid" value="" />
+<div class="battle"></div><div class="battle-log"></div><div class="replay-controls"></div><div class="replay-controls-2"></div>
+<h1 style="font-weight:normal;text-align:center"><strong>${escapeHtml(title)}</strong><br />${escapeHtml(p1)} vs. ${escapeHtml(p2)}</h1>
+<script type="text/plain" class="battle-log-data">${logText}</script>
+</div>
+<script>
+let daily = Math.floor(Date.now()/1000/60/60/24);document.write('<script src="https://play.pokemonshowdown.com/js/replay-embed.js?version'+daily+'"></'+'script>');
+</script>
+`;
+}
+
+/** Writes replayHtml(battle, options) to outputPath and returns outputPath. */
+function writeReplayHtml(battle, outputPath, options) {
+  fs.writeFileSync(outputPath, replayHtml(battle, options));
+  return outputPath;
+}
+
+module.exports = { createBattle, snapshot, fork, step, runUntil, replayHtml, writeReplayHtml };
