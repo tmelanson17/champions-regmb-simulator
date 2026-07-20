@@ -68,6 +68,39 @@ function runUntil(battle, stopWhen, choicesForTurn = () => ({})) {
   return battle;
 }
 
+/**
+ * Sets a Pokemon's HP to an exact percentage of its max HP, bypassing move
+ * damage / RNG entirely. This is a raw field write (like what
+ * Battle.fromJSON does when restoring a snapshot) -- it doesn't run damage
+ * events, so things gated on "just took damage" (e.g. a berry that heals at
+ * <=25% HP) won't fire; set the field you actually want directly if you need
+ * that too.
+ */
+function setHpPercent(pokemon, percent) {
+  pokemon.hp = Math.max(0, Math.min(pokemon.maxhp, Math.round(pokemon.maxhp * percent / 100)));
+  return pokemon;
+}
+
+/**
+ * Puts `pokemon` into active slot `pos` on its own side, replacing whoever
+ * is there via the sim's real switch-in logic (so switch-in abilities,
+ * hazards, etc. behave the same as an actual in-battle switch would).
+ */
+function switchActive(pokemon, pos) {
+  pokemon.side.battle.actions.switchIn(pokemon, pos);
+  return pokemon;
+}
+
+/**
+ * Regenerates the pending choice request after directly mutating state
+ * (HP, active Pokemon, turn number, ...) so activeRequest/requestState are
+ * consistent again and the battle is ready for step()/runUntil().
+ */
+function refreshRequest(battle, type = 'move') {
+  battle.makeRequest(type);
+  return battle;
+}
+
 function escapeHtml(text) {
   return String(text).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 }
@@ -113,4 +146,8 @@ function writeReplayHtml(battle, outputPath, options) {
   return outputPath;
 }
 
-module.exports = { createBattle, snapshot, fork, step, runUntil, replayHtml, writeReplayHtml };
+module.exports = {
+  createBattle, snapshot, fork, step, runUntil,
+  setHpPercent, switchActive, refreshRequest,
+  replayHtml, writeReplayHtml,
+};
