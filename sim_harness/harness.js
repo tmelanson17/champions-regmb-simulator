@@ -2,6 +2,9 @@
 
 const fs = require('fs');
 const { Battle, BattleStream, Teams } = require('pokemon-showdown');
+// Not part of the public package export (sim/index.ts); pulled from the
+// compiled sim module directly, same as battle-stream.ts does internally.
+const { extractChannelMessages } = require('pokemon-showdown/dist/sim/battle.js');
 
 /**
  * Builds a fresh battle by sending the same '>start' / '>player' commands a
@@ -79,9 +82,15 @@ function escapeHtml(text) {
 function replayHtml(battle, { title = 'Simulated battle' } = {}) {
   const p1 = (battle.p1 && battle.p1.name) || 'p1';
   const p2 = (battle.p2 && battle.p2.name) || 'p2';
+  // battle.log interleaves each event's private ('|split|PLAYER' + secret
+  // line) and public (shared line) variants back to back, e.g. exact HP
+  // immediately followed by rounded HP -- that's for per-viewer filtering,
+  // not two separate events. Channel 0 is the public/spectator view real
+  // replays use; feeding the raw log in would render every split event twice.
+  const spectatorLog = extractChannelMessages(battle.log.join('\n'), [0])[0];
   // PS escapes every '/' in the embedded log so nothing inside it can ever
   // be misread as a literal '</script>' closing the tag early.
-  const logText = battle.log.join('\n').replace(/\//g, '\\/');
+  const logText = spectatorLog.join('\n').replace(/\//g, '\\/');
 
   return `<!DOCTYPE html>
 <meta charset="utf-8" />
