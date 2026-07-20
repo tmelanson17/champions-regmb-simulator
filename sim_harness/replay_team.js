@@ -60,3 +60,25 @@ function reconstructTeamsFromReplay(logText) {
 }
 
 module.exports = { parseShowteams, applyDefaultEvs, reconstructTeamsFromReplay, NATURE_BOOST };
+
+// CLI: node replay_team.js path/to/replay.html
+if (require.main === module) {
+  const fs = require('fs');
+  const replayPath = process.argv[2];
+  if (!replayPath) {
+    console.error('Usage: node replay_team.js path/to/replay.html');
+    process.exit(1);
+  }
+
+  const logText = fs.readFileSync(replayPath, 'utf8');
+  const teams = reconstructTeamsFromReplay(logText);
+  if (Object.keys(teams).length === 0) {
+    console.error('No |showteam| lines found in that replay (open team sheets may not have been used).');
+    process.exit(1);
+  }
+
+  for (const [player, text] of Object.entries(teams)) {
+    console.log(`=== ${player} ===`);
+    console.log(text);
+  }
+}
