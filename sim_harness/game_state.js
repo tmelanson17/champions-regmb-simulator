@@ -1,83 +1,48 @@
 'use strict';
 
-// A plain-old-data snapshot of battle state, curated to exactly the fields
-// this project tracks (active / confirmed / status / HP / moves+PP / boosts
-// per Pokemon, plus weather/terrain/Trick Room for the field).
+// No wrapper: the sim's own Pokemon/Field/Battle objects already are the
+// data this project tracks, and they stay live as the battle continues (a
+// projected copy would go stale the moment another step() runs). Read them
+// directly off the battle:
 //
-// Checked the sim first: there's no dedicated struct with these exact
-// fields, but Battle.toJSON() (sim/state.ts's State.serializeBattle) already
-// plain-object-serializes essentially all of it -- pokemon.hp/maxhp/status/
-// fainted/isActive/boosts/moveSlots (with pp/maxpp), field.weather/terrain/
-// pseudoWeather (Trick Room lives there, keyed 'trickroom'). That's the
-// closest built-in analog, but it's the *full* internal engine state (PRNG
-// seed, action queue, per-effect internal EffectState objects, etc.), not a
-// clean view -- so this module is a thin projection on top of the live
-// Pokemon/Field objects (sim/pokemon.ts, sim/field.ts), not a re-derivation.
+//   pokemon.hp, pokemon.maxhp        HP
+//   pokemon.fainted                  true once HP hits 0
+//   pokemon.status                   '' | 'brn' | 'par' | 'slp' | 'frz' | 'psn' | 'tox'
+//   pokemon.isActive                 on the field right now
+//   pokemon.boosts                   { atk, def, spa, spd, spe, accuracy, evasion }, -6..6
+//   pokemon.moveSlots                [{ id, move, pp, maxpp, disabled, ... }]
+//   battle.field.weather              ID string, '' if none
+//   battle.field.terrain               ID string, '' if none
+//   battle.field.pseudoWeather          { [id]: EffectState }; Trick Room is 'trickroom'
 //
-// One field has no engine equivalent at all: `confirmed`. The real
-// simulator always has perfect information about every Pokemon on both
-// teams -- it has no notion of "not yet confirmed brought". That concept
-// only exists here because construct_scene.js / state_from_replay_turn.js
-// have to guess at the un-revealed half of each side's brought-4 when
-// reconstructing from a replay that only confirms leads and later switch-ins.
-
-const STATUS_NONE = 'NONE';
-const STATUS_FAINTED = 'FAINTED';
+// The one field with no engine equivalent is `confirmed` -- the real
+// simulator always has perfect information about both teams, so it has no
+// notion of "not yet confirmed brought". That only matters when
+// reconstructing from a replay that only confirms leads and later
+// switch-ins (see construct_scene.js). markConfirmed() below sets it
+// directly on the live Pokemon objects, same as any other field.
 
 /**
- * `isConfirmed(pokemon)` decides the `confirmed` field; defaults to "always
- * confirmed", which is correct for any battle this harness built itself
- * (full team knowledge) and wrong only for replay-reconstructed scenes,
- * where the caller should pass a real confirmation check.
+ * Sets `pokemon.confirmed` directly on every Pokemon in `battle`, true
+ * unless its species is named in `unconfirmedSpecies[sideId]`. Call again
+ * whenever new information is revealed (e.g. a switch-in) to flip one back
+ * to true.
  */
-function pokemonState(pokemon, { isConfirmed = () => true } = {}) {
-  return {
-    species: pokemon.species.name,
-    active: pokemon.isActive,
-    confirmed: isConfirmed(pokemon),
-    status: pokemon.fainted ? STATUS_FAINTED : (pokemon.status ? pokemon.status : STATUS_NONE),
-    hp: pokemon.hp,
-    maxhp: pokemon.maxhp,
-    moves: pokemon.moveSlots.map(slot => ({
-      id: slot.id,
-      name: slot.move,
-      pp: slot.pp,
-      maxpp: slot.maxpp,
-      uses: slot.maxpp - slot.pp,
-    })),
-    boosts: { ...pokemon.boosts },
-  };
+function markConfirmed(battle, unconfirmedSpecies = {}) {
+  for (const side of battle.sides) {
+    const unconfirmed = unconfirmedSpecies[side.id] || new Set();
+    for (const pokemon of side.pokemon) {
+      pokemon.confirmed = !unconfirmed.has(pokemon.species.name);
+    }
+  }
+  return battle;
 }
 
-function fieldState(field) {
-  return {
-    weather: field.weather || null,
-    terrain: field.terrain || null,
-    trickRoom: 'trickroom' in field.pseudoWeather,
-    pseudoWeather: Object.keys(field.pseudoWeather),
-  };
-}
+module.exports = { markConfirmed };
 
-/**
- * `isConfirmed` maps side id -> (pokemon) => boolean. Any side omitted
- * defaults to "always confirmed".
- */
-function battleState(battle, { isConfirmed = {} } = {}) {
-  return {
-    turn: battle.turn,
-    field: fieldState(battle.field),
-    sides: battle.sides.map(side => ({
-      id: side.id,
-      pokemon: side.pokemon.map(p => pokemonState(p, { isConfirmed: isConfirmed[side.id] })),
-    })),
-  };
-}
-
-module.exports = { pokemonState, fieldState, battleState, STATUS_NONE, STATUS_FAINTED };
-
-// Demo: build the same turn-3 scene as construct_scene.js and print its POD
-// state, with confirmed flags reflecting what the replay actually revealed
-// (leads + Milotic's switch-in) vs. the guessed placeholder bench mons.
+// Demo: build the same turn-3 scene as construct_scene.js, mark the
+// placeholder bench mons unconfirmed, then read the state straight off the
+// live objects -- no snapshot/wrapper involved.
 //
 // Run with: node game_state.js path/to/replay.html
 if (require.main === module) {
@@ -106,14 +71,23 @@ if (require.main === module) {
   battle.turn = 3;
   refreshRequest(battle);
 
-  const revealed = {
-    p1: new Set(['Chandelure', 'Sneasler']), // leads only; bench 2 unconfirmed
-    p2: new Set(['Gholdengo', 'Hydreigon', 'Milotic']), // leads + confirmed switch-in
-  };
-  const isConfirmed = {
-    p1: p => revealed.p1.has(p.species.name),
-    p2: p => revealed.p2.has(p.species.name),
-  };
+  markConfirmed(battle, {
+    p1: new Set(['Scrafty', 'Toxapex']), // leads (Chandelure, Sneasler) unlisted -> confirmed
+    p2: new Set(['Scovillain']), // leads + Milotic (confirmed switch-in) unlisted -> confirmed
+  });
 
-  console.log(JSON.stringify(battleState(battle, { isConfirmed }), null, 2));
+  console.log(`turn ${battle.turn}`);
+  console.log('field:', battle.field.weather || '(no weather)', battle.field.terrain || '(no terrain)',
+    'trickroom' in battle.field.pseudoWeather ? 'trick room active' : '(no trick room)');
+  for (const side of battle.sides) {
+    console.log(`--- ${side.id} ---`);
+    for (const p of side.pokemon) {
+      const status = p.fainted ? 'FAINTED' : (p.status || 'NONE');
+      console.log(
+        `${p.species.name}: active=${p.isActive} confirmed=${p.confirmed} status=${status} ` +
+        `hp=${p.hp}/${p.maxhp} boosts=${JSON.stringify(p.boosts)}`
+      );
+      for (const m of p.moveSlots) console.log(`  ${m.move}: ${m.pp}/${m.maxpp} pp (${m.maxpp - m.pp} used)`);
+    }
+  }
 }
