@@ -1,0 +1,9 @@
+{
+  "name": "sim-harness",
+  "private": true,
+  "description": "Sketch: drive the pokemon-showdown sim directly, in-process, to snapshot and fork battle state instead of replaying full battles from scratch.",
+  "main": "harness.js",
+  "dependencies": {
+    "pokemon-showdown": "file:../../pokemon-showdown"
+  }
+}
